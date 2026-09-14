@@ -83,7 +83,7 @@ void TCPServer::performHandshake() noexcept{
     std::string request;
 
     while (request.find("\r\n\r\n") == std::string::npos){
-        int bytes_received = recv( m_client_socket, buffer, sizeof(buffer) - 1, 0);
+        int bytes_received = recv(m_client_socket, buffer, sizeof(buffer) - 1, 0);
 
         if (bytes_received == 0) {
             std::cout << "Client disconnected during handshake.\n";
