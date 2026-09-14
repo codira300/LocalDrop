@@ -57,18 +57,93 @@ void TCPClient::createSocket(){
     }
 
     std::cout << "Connected to LocalDrop server!" << std::endl;
+    performHandshake();
+}
+void TCPClient::performHandshake()
+{
+    constexpr std::string_view request =
+        "GET /handshake HTTP/1.1\r\n"
+        "Connection: keep-alive\r\n"
+        "\r\n";
+
+    int bytes_sent = send(
+        m_client_socket,
+        request.data(),
+        static_cast<int>(request.size()),
+        0
+    );
+
+    if (bytes_sent == SOCKET_ERROR)
+    {
+        ErrorLog("Failed to send handshake");
+    }
+
+    char buffer[4096];
+
+    int bytes_received = recv(
+        m_client_socket,
+        buffer,
+        sizeof(buffer) - 1,
+        0
+    );
+
+    if (bytes_received == 0)
+    {
+        ErrorLog("Server disconnected during handshake");
+    }
+
+    if (bytes_received == SOCKET_ERROR)
+    {
+        ErrorLog("Failed to receive handshake response");
+    }
+
+    buffer[bytes_received] = '\0';
+
+    std::string_view response(buffer);
+
+    std::cout << "Server response:\n"<< response<<"\n";
+
+    if (!response.starts_with("HTTP/1.1 200 OK")) {
+        ErrorLog("LocalDrop handshake failed");
+    }
+
+    std::cout << "LocalDrop handshake successful!" << std::endl;
+
+    communicate();
+}
+
+void TCPClient::communicate()
+{
+    const std::string_view message = "Hello from LocalDrop client";
+
+    int bytes_sent = send(m_client_socket, message.data(), static_cast<int>(message.size()), 0);
+
+    if (bytes_sent == SOCKET_ERROR) ErrorLog("Failed to send message");
+
+    char buffer[4096];
+
+    int bytes_received = recv(m_client_socket, buffer, sizeof(buffer) - 1, 0);
+    buffer[bytes_received] = '\0';
+
+    if (bytes_received == 0) {
+        std::cout << "Server disconnected." <<"\n";
+        return;
+    }
+
+    if (bytes_received == SOCKET_ERROR) ErrorLog("Failed to receive response");
+
+    std::string_view response(buffer);
+    std::cout << "Server: " << response <<"\n";
 }
 
 void TCPClient::closeSocket()
 {
-    if (m_client_socket != INVALID_SOCKET)
-    {
+    if (m_client_socket != INVALID_SOCKET) {
         closesocket(m_client_socket);
         m_client_socket = INVALID_SOCKET;
     }
 
-    if (m_serverinfo != nullptr)
-    {
+    if (m_serverinfo != nullptr) {
         freeaddrinfo(m_serverinfo);
         m_serverinfo = nullptr;
     }

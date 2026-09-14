@@ -27,6 +27,8 @@ private:
     SOCKET m_client_socket = INVALID_SOCKET;
 
     void createSocket();
+    void performHandshake();
+    void communicate();
     void closeSocket();
 };
 

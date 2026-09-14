@@ -1,0 +1,286 @@
+#include "tcpserver.h"
+
+char host[INET6_ADDRSTRLEN];
+
+void ErrorLog(const std::string& err)
+{
+    std::cout << err << std::endl;
+    exit(1);
+}
+
+TCPServer::TCPServer()
+{
+    initializeWinsock = WSAStartup(MAKEWORD(2, 2), &wsadata);
+
+    if (initializeWinsock != 0)
+    {
+        ErrorLog("WSAStartup failed to start");
+    }
+
+    startServer();
+}
+
+void TCPServer::startServer()
+{
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    hints.ai_flags = AI_PASSIVE;
+
+    int server_status = getaddrinfo(
+        NULL,
+        DEFAULT_PORT,
+        &hints,
+        &m_serverinfo
+    );
+
+    if (server_status != 0)
+    {
+        ErrorLog("getaddrinfo failed");
+    }
+
+    createSocket();
+}
+
+void TCPServer::createSocket()
+{
+    m_server_socket = socket(
+        m_serverinfo->ai_family,
+        m_serverinfo->ai_socktype,
+        m_serverinfo->ai_protocol
+    );
+
+    if (m_server_socket == INVALID_SOCKET)
+    {
+        ErrorLog("Error creating socket");
+    }
+
+    if (bind(
+        m_server_socket,
+        m_serverinfo->ai_addr,
+        static_cast<int>(m_serverinfo->ai_addrlen)
+    ) == SOCKET_ERROR)
+    {
+        ErrorLog("Binding of the port failed");
+    }
+
+    if (listen(m_server_socket, 1) == SOCKET_ERROR)
+    {
+        ErrorLog("Failed to listen to client");
+    }
+
+    std::cout << "The server is listening at "
+              << inet_ntop(
+                    m_serverinfo->ai_family,
+                    &reinterpret_cast<sockaddr_in*>(
+                        m_serverinfo->ai_addr
+                    )->sin_addr,
+                    host,
+                    sizeof(host)
+                 )
+              << ":"
+              << DEFAULT_PORT
+              << '\n';
+}
+
+void TCPServer::acceptConnection()
+{
+    m_len_clientaddr = sizeof(m_clientaddr);
+
+    m_client_socket = accept(
+        m_server_socket,
+        reinterpret_cast<sockaddr*>(&m_clientaddr),
+        &m_len_clientaddr
+    );
+
+    if (m_client_socket == INVALID_SOCKET)
+    {
+        ErrorLog("Failed to accept client connection");
+    }
+
+    std::cout << "Client connected!" << std::endl;
+
+    performHandshake();
+}
+
+void TCPServer::performHandshake()
+{
+    char buffer[4096];
+
+    std::string request;
+
+    while (request.find("\r\n\r\n") == std::string::npos)
+    {
+        int bytes_received = recv(
+            m_client_socket,
+            buffer,
+            sizeof(buffer) - 1,
+            0
+        );
+
+        if (bytes_received == 0) {
+            std::cout << "Client disconnected during handshake."
+                      << std::endl;
+            return;
+        }
+
+        if (bytes_received == SOCKET_ERROR)
+        {
+            ErrorLog("Failed to receive handshake");
+        }
+
+        buffer[bytes_received] = '\0';
+
+        request += buffer;
+
+        if (request.size() > 8192)
+        {
+            ErrorLog("HTTP header too large");
+        }
+    }
+
+    std::cout << "\n--- HTTP Request ---\n";
+    std::cout << request;
+    std::cout << "--------------------\n";
+
+    if (request.rfind("GET /handshake", 0) != 0)
+    {
+        const std::string badRequest =
+            "HTTP/1.1 400 Bad Request\r\n"
+            "Content-Length: 0\r\n"
+            "Connection: close\r\n"
+            "\r\n";
+
+        send(
+            m_client_socket,
+            badRequest.c_str(),
+            static_cast<int>(badRequest.size()),
+            0
+        );
+
+        return;
+    }
+
+    const std::string response =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 14\r\n"
+        "Content-Type: text/plain\r\n"
+        "Connection: keep-alive\r\n"
+        "\r\n"
+        "LocalDrop OK";
+
+    int bytes_sent = send(
+        m_client_socket,
+        response.c_str(),
+        static_cast<int>(response.size()),
+        0
+    );
+
+    if (bytes_sent == SOCKET_ERROR)
+    {
+        ErrorLog("Failed to send handshake response");
+    }
+
+    std::cout << "Handshake successful!" << std::endl;
+
+    communicate();
+}
+
+void TCPServer::communicate()
+{
+    char buffer[4096];
+
+    while (true)
+    {
+        int bytes_received = recv(
+            m_client_socket,
+            buffer,
+            sizeof(buffer) - 1,
+            0
+        );
+
+        if (bytes_received == 0)
+        {
+            std::cout << "Client disconnected." << std::endl;
+            break;
+        }
+
+        if (bytes_received == SOCKET_ERROR)
+        {
+            std::cout << "Connection error." << std::endl;
+            break;
+        }
+
+        buffer[bytes_received] = '\0';
+
+        std::string message(buffer);
+
+        std::cout << "Client: " << message << std::endl;
+
+        if (message.find("DISCONNECT") == 0)
+        {
+            const std::string response =
+                "DISCONNECT";
+
+            send(
+                m_client_socket,
+                response.c_str(),
+                static_cast<int>(response.size()),
+                0
+            );
+
+            std::cout << "Client requested disconnect."
+                      << std::endl;
+
+            break;
+        }
+
+        const std::string response =
+            "ACK";
+
+        int bytes_sent = send(
+            m_client_socket,
+            response.c_str(),
+            static_cast<int>(response.size()),
+            0
+        );
+
+        if (bytes_sent == SOCKET_ERROR)
+        {
+            std::cout << "Failed to send response."
+                      << std::endl;
+            break;
+        }
+    }
+
+    closesocket(m_client_socket);
+    m_client_socket = INVALID_SOCKET;
+}
+
+void TCPServer::closeSocket()
+{
+    if (m_client_socket != INVALID_SOCKET)
+    {
+        closesocket(m_client_socket);
+        m_client_socket = INVALID_SOCKET;
+    }
+
+    if (m_server_socket != INVALID_SOCKET)
+    {
+        closesocket(m_server_socket);
+        m_server_socket = INVALID_SOCKET;
+    }
+
+    if (m_serverinfo != nullptr)
+    {
+        freeaddrinfo(m_serverinfo);
+        m_serverinfo = nullptr;
+    }
+
+    WSACleanup();
+}
+
+TCPServer::~TCPServer()
+{
+    closeSocket();
+}

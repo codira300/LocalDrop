@@ -11,7 +11,7 @@ class TCPServer{
     public: 
         TCPServer();
         ~TCPServer();
-        void acceptConnection();
+        void acceptConnection() noexcept;
        
 
         private:
@@ -20,9 +20,11 @@ class TCPServer{
             addrinfo hints{};
             struct sockaddr_in m_sockaddr;
             addrinfo* m_serverinfo = nullptr;
-            void createSocket();
-            void startServer();  
-            void closeSocket();
+            void createSocket() noexcept;
+            void startServer() noexcept;  
+            void performHandshake() noexcept;
+            void communicate() noexcept;
+            void closeSocket() noexcept;
             SOCKET m_server_socket = INVALID_SOCKET;
             SOCKET m_client_socket = INVALID_SOCKET;
             sockaddr_in m_clientaddr{};
