@@ -1,2 +1,4 @@
 crypto.cpp
 crypto.exe
+*.exe
+*.o
