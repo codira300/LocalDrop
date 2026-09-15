@@ -1,19 +1,10 @@
 #include "tcpclient.h"
 
-void ErrorLog(const std::string& err)
-{
-    std::cout << err << std::endl;
-    exit(1);
-}
-
 TCPClient::TCPClient()
 {
     initializeWinsock = WSAStartup(MAKEWORD(2, 2), &wsadata);
 
-    if (initializeWinsock != 0)
-    {
-        ErrorLog("WSAStartup failed to start");
-    }
+    if (initializeWinsock != 0) ErrorLog("WSAStartup failed to start");
 
     connectToServer();
 }
@@ -33,10 +24,7 @@ void TCPClient::connectToServer()
         &m_serverinfo
     );
 
-    if (client_status != 0)
-    {
-        ErrorLog("getaddrinfo failed");
-    }
+    if (client_status != 0) ErrorLog("getaddrinfo failed");
 
     createSocket();
 }
@@ -48,22 +36,23 @@ void TCPClient::createSocket(){
         m_serverinfo->ai_protocol
     );
 
-    if (m_client_socket == INVALID_SOCKET)    {
-        ErrorLog("Error creating client socket");
-    }
+    if (m_client_socket == INVALID_SOCKET) ErrorLog("Error creating client socket");
 
-    if (connect(m_client_socket,m_serverinfo->ai_addr,static_cast<int>(m_serverinfo->ai_addrlen)) == SOCKET_ERROR){
-        ErrorLog("Failed to connect to server");
-    }
+    if (connect(m_client_socket,m_serverinfo->ai_addr,static_cast<int>(m_serverinfo->ai_addrlen)) == SOCKET_ERROR) ErrorLog("Failed to connect to server");
 
     std::cout << "Connected to LocalDrop server!" << std::endl;
     performHandshake();
 }
-void TCPClient::performHandshake()
-{
-    constexpr std::string_view request =
+
+void TCPClient::performHandshake(){
+    const std::string& clientPublicKey = m_crypto.getPublicKey();
+
+    std::string request =
         "GET /handshake HTTP/1.1\r\n"
         "Connection: keep-alive\r\n"
+        "X-LocalDrop-Key: " +
+        clientPublicKey +
+        "\r\n"
         "\r\n";
 
     int bytes_sent = send(
@@ -114,7 +103,7 @@ void TCPClient::performHandshake()
 
 void TCPClient::communicate()
 {
-    const std::string_view message = "Hello from LocalDrop client";
+    const std::string_view message = "\nHello from LocalDrop client";
 
     int bytes_sent = send(m_client_socket, message.data(), static_cast<int>(message.size()), 0);
 

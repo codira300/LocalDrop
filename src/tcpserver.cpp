@@ -1,11 +1,7 @@
 #include "tcpserver.h"
+#include "error.h"
+
 char host[INET6_ADDRSTRLEN];
-
-void ErrorLog(const std::string& err){
-    std::cout<< err <<std::endl;
-    exit(1);
-
-}
 
 TCPServer::TCPServer()
 {
@@ -15,6 +11,7 @@ TCPServer::TCPServer()
     {
         ErrorLog("WSAStartup failed to start");
     }
+
     startServer();
 }
 
@@ -31,7 +28,6 @@ void TCPServer::startServer() noexcept{
     createSocket();
 }
 
-
 void TCPServer::createSocket() noexcept{
     sockaddr_in* ipv4 = reinterpret_cast<sockaddr_in*>(m_serverinfo->ai_addr);
     m_server_socket = socket(m_serverinfo->ai_family, m_serverinfo->ai_socktype, m_serverinfo->ai_protocol);
@@ -39,48 +35,53 @@ void TCPServer::createSocket() noexcept{
         ErrorLog("Error creating socket \n");
     }
 
-    if(bind(m_server_socket, m_serverinfo->ai_addr, (int) m_serverinfo->ai_addrlen) < 0){
-        ErrorLog("Binding of the port failed");
-    }
+    if(bind(m_server_socket, m_serverinfo->ai_addr, (int) m_serverinfo->ai_addrlen) < 0) ErrorLog("Binding of the port failed");
 
     std::cout<<"The server is listening at "<< inet_ntop(m_serverinfo->ai_family, &ipv4->sin_addr, host, sizeof(host))<<":"<<DEFAULT_PORT<< '\n'; 
 }
 
 void TCPServer::acceptConnection() noexcept{
-    if(listen(m_server_socket, 1) != 0){
-        ErrorLog("Failed to listen to client \n");
-    }
-
+    if(listen(m_server_socket, 1) != 0) ErrorLog("Failed to listen to client \n");
+  
     m_client_socket = accept(m_server_socket, reinterpret_cast<sockaddr*>(&m_clientaddr), &m_len_clientaddr);
 
-    if (m_client_socket == INVALID_SOCKET){
-        ErrorLog("Failed to accept client connection");
-    }
-
+    if (m_client_socket == INVALID_SOCKET) ErrorLog("Failed to accept client connection");
+ 
     std::cout << "Client connected! \n";
     performHandshake();
-}
-
-namespace LocalDropProtocol
-{
-    const std::string BAD_REQUEST =
-        "HTTP/1.1 400 Bad Request\r\n"
-        "Content-Length: 0\r\n"
-        "Connection: close\r\n"
-        "\r\n";
-    
-    const std::string GOOD_REQUEST =
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Length: 14\r\n"
-        "Content-Type: text/plain\r\n"
-        "Connection: keep-alive\r\n"
-        "\r\n"
-        "LocalDrop OK";
 }
 
 void TCPServer::performHandshake() noexcept{
     char buffer[4096];
     std::string request;
+
+    const std::string& serverPublicKey = m_crypto.getPublicKey();
+
+    struct LocalDropProtocol{
+    const std::string BAD_REQUEST =
+        "HTTP/1.1 400 Bad Request\r\n"
+        "Content-Length: 0\r\n"
+        "Connection: close\r\n"
+        "\r\n";
+
+    std::string GOOD_REQUEST;
+
+    LocalDropProtocol(const std::string& serverPublicKey)
+        : GOOD_REQUEST(
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Length: 14\r\n"
+            "Content-Type: text/plain\r\n"
+            "Connection: keep-alive\r\n"
+            "X-LocalDrop-Key: " +
+            serverPublicKey +
+            "\r\n"
+            "\r\n"
+            "LocalDrop OK"
+        )
+        {}
+    };
+
+    LocalDropProtocol protocol(serverPublicKey);
 
     while (request.find("\r\n\r\n") == std::string::npos){
         int bytes_received = recv(m_client_socket, buffer, sizeof(buffer) - 1, 0);
@@ -100,15 +101,28 @@ void TCPServer::performHandshake() noexcept{
         if (request.size() > 8192) ErrorLog("HTTP header too large");
     }
 
-    const std::string& response = request.rfind("GET /handshake", 0) == 0 ? LocalDropProtocol::GOOD_REQUEST : LocalDropProtocol::BAD_REQUEST;
+    const std::string& response = request.rfind("GET /handshake", 0) == 0 ? protocol.GOOD_REQUEST : protocol.BAD_REQUEST;
     std::cout<<"HTTP Request \n";
     std::cout << request << "\n";
 
+    const std::string keyHeader = "X-LocalDrop-Key: ";
+    std::size_t keyPosition = request.find(keyHeader);
+
+    if (keyPosition == std::string::npos) ErrorLog("Client public key missing");
+
+    keyPosition += keyHeader.size();
+    std::size_t keyEnd = request.find("\r\n", keyPosition);
+
+    if (keyEnd == std::string::npos) ErrorLog("Invalid public key header");
+
+    std::string clientPublicKey = request.substr(keyPosition, keyEnd - keyPosition);
+
+    if (!m_crypto.deriveServerSessionKeys(clientPublicKey)) ErrorLog("Failed to establish shared secret");
+    std::cout << "Shared secret established!\n";
+
     int bytes_sent = send(m_client_socket, response.c_str(), static_cast<int>(response.size()), 0 );
 
-    if (bytes_sent == SOCKET_ERROR) {
-        ErrorLog("Failed to send handshake response");
-    }
+    if (bytes_sent == SOCKET_ERROR) ErrorLog("Failed to send handshake response");
 
     std::cout << "Handshake successful! \n";
 

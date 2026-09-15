@@ -6,6 +6,9 @@
 #include <ws2tcpip.h>
 #include <string>
 #include <cstdint>
+#include <sodium.h>
+#include "crypto.h"
+#include "error.h"
 
 #define DEFAULT_PORT "8080"
 #define SERVER_HOST "127.0.0.1"
@@ -30,6 +33,8 @@ private:
     void performHandshake();
     void communicate();
     void closeSocket();
+    Crypto m_crypto;
+
 };
 
 #endif

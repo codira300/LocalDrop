@@ -5,6 +5,9 @@
 #include <ws2tcpip.h>
 #include <string>
 #include <cstdint>
+#include <sodium.h>
+#include "crypto.h"
+
 
 #define DEFAULT_PORT "8080"
 class TCPServer{
@@ -25,11 +28,13 @@ class TCPServer{
             void performHandshake() noexcept;
             void communicate() noexcept;
             void closeSocket() noexcept;
+
+            Crypto m_crypto;
             SOCKET m_server_socket = INVALID_SOCKET;
             SOCKET m_client_socket = INVALID_SOCKET;
             sockaddr_in m_clientaddr{};
             int m_len_clientaddr = sizeof(m_clientaddr);
-                   
+
 };
 
 #endif
