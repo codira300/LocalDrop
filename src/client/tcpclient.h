@@ -7,18 +7,20 @@
 #include <string>
 #include <cstdint>
 #include <sodium.h>
-#include "crypto.h"
-#include "error.h"
+#include "../crypto/crypto.h"
+#include "../error/error.h"
+#include "../message.h"
+#include "../messagegenerator.h"
 
 #define DEFAULT_PORT "8080"
 #define SERVER_HOST "127.0.0.1"
+#define DISCONNECT "Disconnect"
 
-class TCPClient
-{
+class TCPClient{
 public:
-    TCPClient();
+    TCPClient(const std::string& clientId);
     ~TCPClient();
-
+    void start();
     void connectToServer();
 
 private:
@@ -28,12 +30,14 @@ private:
     addrinfo* m_serverinfo = nullptr;
 
     SOCKET m_client_socket = INVALID_SOCKET;
+    std::string m_client_id;
 
     void createSocket();
     void performHandshake();
     void communicate();
     void closeSocket();
     Crypto m_crypto;
+    MessageGenerator m_message_generator;
 
 };
 
