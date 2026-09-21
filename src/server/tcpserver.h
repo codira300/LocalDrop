@@ -44,7 +44,7 @@ private:
 
     void performHandshake(SOCKET clientSocket) noexcept;
 
-    void TCPServer::invalidate_socket();
+    void invalidate_socket();
 
     void communicate(SOCKET clientSocket) noexcept;
 

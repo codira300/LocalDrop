@@ -2,3 +2,4 @@ crypto.cpp
 crypto.exe
 *.exe
 *.o
+build/
