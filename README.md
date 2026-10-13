@@ -1,6 +1,6 @@
 # LocalDrop
 
-LocalDrop is a C++-based local network communication and file-transfer project designed to enable devices connected to the same network to communicate directly.
+LocalDrop is a C++-based local network communication project designed to enable devices connected to the same network to communicate directly.
 
 The project was developed as a practical exploration of **network programming, concurrency, cryptographic key exchange, and systems-level software development in C++**.
 
