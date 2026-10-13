@@ -382,6 +382,7 @@ Windows Firewall may need an inbound rule allowing the LocalDrop server to accep
 * **libsodium**
 * **C++ Standard Library**
 * **Git**
+**GitHub**
 * **GitLab**
 * **MSYS2**
 * **MinGW-w64 / GCC**
